@@ -1,0 +1,140 @@
+# Affiliate Product Research Template
+# Variables: {count}, {platform}, {niche}, {market}, {min_price}, {max_price}
+
+name: affiliate_products
+description: Find trending products suitable for affiliate marketing content
+
+base_prompt: |
+  Find {count} trending products for {platform} content in the {niche} category.
+
+  Target Market: {market}
+  Price Range: ${min_price} - ${max_price}
+
+  ## Product Selection Criteria
+
+  1. **VISUAL APPEAL** - Must be demonstrable in short video
+  2. **IMPULSE PRICE** - Within specified range for easy buy decisions
+  3. **PROBLEM/SOLUTION** - Clear pain point it addresses
+  4. **TRENDING** - Rising interest, not oversaturated
+  5. **COMMISSION** - 4%+ affiliate rate preferred
+
+  ## Scoring (1-100)
+
+  - Visual demo potential: 30 points
+  - Price point sweet spot: 20 points
+  - Problem/solution clarity: 20 points
+  - Trend momentum: 15 points
+  - Commission rate: 15 points
+
+niches:
+  tech_gadgets:
+    categories:
+      - electronics
+      - gadgets
+      - tech-accessories
+    keywords:
+      - wireless
+      - portable
+      - smart
+      - USB-C
+      - charging
+    content_angles:
+      - "Does this ACTUALLY work?"
+      - "Best tech under $50"
+      - "Gadgets you didn't know you needed"
+      - "Upgrade your setup"
+      - "Tech that changed my life"
+    target_audience: "18-35, tech-interested"
+
+  beauty_skincare:
+    categories:
+      - beauty
+      - skincare
+      - personal-care
+    keywords:
+      - viral
+      - routine
+      - glow
+      - anti-aging
+      - hydrating
+    content_angles:
+      - "Morning routine essentials"
+      - "Before and after"
+      - "Dermatologist approved"
+      - "Glass skin tutorial"
+      - "Products I actually repurchase"
+    target_audience: "18-45, beauty-focused"
+
+  home_organization:
+    categories:
+      - home-garden
+      - storage
+      - organization
+    keywords:
+      - space-saving
+      - aesthetic
+      - minimalist
+      - organize
+      - clean
+    content_angles:
+      - "Small space solutions"
+      - "Satisfying organization"
+      - "Room transformation"
+      - "Amazon home finds"
+      - "Aesthetic organization"
+    target_audience: "25-45, home-focused"
+
+  kitchen_gadgets:
+    categories:
+      - kitchen
+      - cooking
+      - appliances
+    keywords:
+      - time-saving
+      - easy
+      - quick
+      - healthy
+      - meal-prep
+    content_angles:
+      - "Kitchen gadgets that actually work"
+      - "Lazy cooking hacks"
+      - "Meal prep made easy"
+      - "30-second recipes"
+      - "Dorm room cooking"
+    target_audience: "20-40, cooking-interested"
+
+  fitness_wellness:
+    categories:
+      - sports-outdoors
+      - fitness
+      - health
+    keywords:
+      - workout
+      - recovery
+      - portable
+      - home-gym
+      - wellness
+    content_angles:
+      - "Gym bag essentials"
+      - "Home workout equipment"
+      - "Recovery tools that work"
+      - "Fitness on a budget"
+      - "Workout transformation"
+    target_audience: "18-40, fitness-focused"
+
+output_format:
+  required_fields:
+    - name
+    - price
+    - asin
+    - affiliate_link
+    - category
+    - trend_score
+    - why_trending
+    - content_angle
+    - confidence
+  optional_fields:
+    - image_url
+    - commission_rate
+    - competitor_count
+    - review_count

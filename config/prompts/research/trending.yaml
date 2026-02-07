@@ -1,0 +1,79 @@
+# Trending Content Research Template
+# Variables: {count}, {platform}, {category}, {timeframe}
+
+name: trending_content
+description: Research trending topics and viral content for inspiration
+
+base_prompt: |
+  Research the top {count} trending topics for {platform} in the {category} space.
+
+  Timeframe: {timeframe}
+
+  ## What to Look For
+
+  1. **VIRAL FORMATS** - What content structures are performing?
+  2. **TRENDING SOUNDS** - Popular audio/music being used
+  3. **HASHTAG MOMENTUM** - Rising hashtags in this category
+  4. **CONTENT GAPS** - What's NOT being covered well?
+  5. **ENGAGEMENT PATTERNS** - What gets comments vs. just views?
+
+  ## Analysis Required
+
+  For each trend, provide:
+  - Description of the trend
+  - Why it's working (psychology)
+  - How to adapt it for products
+  - Estimated trend lifespan
+  - Competition level
+
+categories:
+  product_reviews:
+    signals:
+      - "TikTok made me buy it"
+      - "Amazon finds"
+      - "Is it worth it?"
+      - "Honest review"
+    content_types:
+      - Unboxing
+      - Testing claims
+      - Comparison
+      - Long-term review
+
+  lifestyle:
+    signals:
+      - "Day in my life"
+      - "Get ready with me"
+      - "Room tour"
+      - "Aesthetic"
+    content_types:
+      - Routine videos
+      - Transformation
+      - Haul videos
+      - Organization
+
+  tutorials:
+    signals:
+      - "How to"
+      - "Tutorial"
+      - "Hack"
+      - "Tip"
+    content_types:
+      - Step-by-step
+      - Quick tip
+      - Before/after
+      - Problem/solution
+
+timeframes:
+  - last_24h
+  - last_7d
+  - last_30d
+  - evergreen
+
+output_format:
+  required_fields:
+    - trend_name
+    - description
+    - platform_specific_notes
+    - content_ideas
+    - hashtags
+    - estimated_lifespan

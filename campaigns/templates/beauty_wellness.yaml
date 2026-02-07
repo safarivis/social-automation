@@ -1,0 +1,72 @@
+# Beauty & Wellness Campaign
+# Skincare, beauty tools, and self-care products
+
+campaign:
+  id: beauty_wellness
+  name: "Beauty & Wellness"
+  niche: beauty_skincare
+  description: "Daily beauty, skincare, and wellness content"
+
+research:
+  template: affiliate
+  price_range: [10, 50]
+  products_per_run: 5
+  categories:
+    - beauty
+    - skincare
+    - personal-care
+  keywords:
+    - viral
+    - routine
+    - glow
+    - skincare
+    - self-care
+
+platforms:
+  tiktok:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 3
+    duration: 20
+    aspect_ratio: "9:16"
+    priority: 1
+    content_focus: "Before/after, routine demos, product reveals"
+
+  instagram:
+    enabled: true
+    content_type: short_video  # Reels
+    posts_per_day: 3
+    duration: 30
+    aspect_ratio: "9:16"
+    priority: 1  # Same priority as TikTok for beauty
+    content_focus: "Aesthetic routines, clean girl aesthetic"
+
+  youtube:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 2
+    duration: 45
+    aspect_ratio: "9:16"
+    priority: 2
+    content_focus: "Tutorial style, longer routines"
+
+  twitter:
+    enabled: false  # Beauty doesn't perform as well on X
+    content_type: image
+    posts_per_day: 2
+
+  linkedin:
+    enabled: false  # Not suitable for beauty content
+
+schedule:
+  enabled: true
+  cron: "0 9 * * *"  # Daily at 9 AM
+  timezone: "America/New_York"
+
+content_angles:
+  - "Morning routine essentials"
+  - "Glass skin tutorial"
+  - "Products I actually repurchase"
+  - "Before and after"
+  - "Self-care Sunday"
+  - "5-minute glow up"

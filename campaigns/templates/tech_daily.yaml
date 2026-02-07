@@ -1,0 +1,80 @@
+# Tech Gadgets Daily Campaign
+# Focuses on tech, electronics, and gadgets across all platforms
+
+campaign:
+  id: tech_daily
+  name: "Tech Gadgets Daily"
+  niche: tech_gadgets
+  description: "Daily content creation for tech gadgets and electronics"
+
+research:
+  template: affiliate
+  price_range: [15, 75]
+  products_per_run: 5
+  categories:
+    - electronics
+    - tech-accessories
+    - gadgets
+  keywords:
+    - wireless
+    - portable
+    - smart
+    - USB-C
+    - charging
+
+platforms:
+  tiktok:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 3
+    duration: 15
+    aspect_ratio: "9:16"
+    priority: 1  # Post here first
+    content_focus: "Quick demos, satisfying tech reveals"
+
+  instagram:
+    enabled: true
+    content_type: short_video  # Reels
+    posts_per_day: 2
+    duration: 30
+    aspect_ratio: "9:16"
+    priority: 2
+    content_focus: "Aesthetic setup shots, clean demos"
+
+  youtube:
+    enabled: true
+    content_type: short_video  # Shorts
+    posts_per_day: 2
+    duration: 45
+    aspect_ratio: "9:16"
+    priority: 3
+    content_focus: "Slightly longer demos, comparisons"
+
+  twitter:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 5
+    duration: 30
+    aspect_ratio: "16:9"
+    priority: 4
+    content_focus: "Hot takes, tech opinions"
+
+  linkedin:
+    enabled: true
+    content_type: text  # Professional focus
+    posts_per_day: 1
+    priority: 5
+    content_focus: "Productivity tools, WFH upgrades"
+
+schedule:
+  enabled: true
+  cron: "0 8 * * *"  # Daily at 8 AM
+  timezone: "America/New_York"
+
+content_angles:
+  - "Does this ACTUALLY work?"
+  - "Best tech under $50"
+  - "Gadgets you didn't know you needed"
+  - "Upgrade your setup"
+  - "AirPods alternatives that don't suck"
+  - "Tech that changed my life"

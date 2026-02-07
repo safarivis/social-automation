@@ -1,0 +1,502 @@
+"""
+Twitter/X Platform Adapter
+
+Handles Twitter/X content via the official XDK (X Developer Kit).
+Supports text, images, and video posts with OAuth 2.0 PKCE authentication.
+"""
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+import json
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from xdk import Client
+from xdk.posts import PostsClient
+from xdk.media import MediaClient
+from xdk.oauth1_auth import OAuth1
+
+from platforms.base import PlatformAdapter
+from core.models import Platform, ContentType, ContentPackage, AspectRatio
+from config.settings import (
+    TWITTER_API_KEY, TWITTER_API_SECRET,
+    TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET,
+    TWITTER_BEARER_TOKEN,
+    get_platform_setting
+)
+
+
+class TwitterAdapter(PlatformAdapter):
+    """Twitter/X platform adapter using official XDK"""
+
+    def __init__(self):
+        super().__init__()
+        self._client: Optional[Client] = None
+        self._posts_client: Optional[PostsClient] = None
+        self._media_client: Optional[MediaClient] = None
+
+        # Store credentials
+        self._bearer_token = TWITTER_BEARER_TOKEN
+        self._access_token = TWITTER_ACCESS_TOKEN
+        self._access_secret = TWITTER_ACCESS_SECRET
+        self._client_id = TWITTER_API_KEY
+        self._client_secret = TWITTER_API_SECRET
+
+        # Initialize client if credentials available
+        self._initialize_client()
+
+    def _initialize_client(self):
+        """Initialize XDK client with available credentials"""
+        try:
+            # Prefer OAuth1 for user context (required for posting)
+            if self._client_id and self._client_secret and self._access_token and self._access_secret:
+                # OAuth 1.0a - required for posting tweets
+                auth = OAuth1(
+                    api_key=self._client_id,
+                    api_secret=self._client_secret,
+                    callback='https://localhost:3000/callback',
+                    access_token=self._access_token,
+                    access_token_secret=self._access_secret
+                )
+                self._client = Client(auth=auth)
+                self._authenticated = True
+            elif self._bearer_token:
+                # App-only auth with bearer token (read-only)
+                self._client = Client(bearer_token=self._bearer_token)
+                self._authenticated = True
+            elif self._client_id and self._client_secret:
+                # OAuth 2.0 PKCE flow - client ready for auth
+                self._client = Client(
+                    client_id=self._client_id,
+                    client_secret=self._client_secret,
+                )
+                self._authenticated = False  # Need to complete OAuth flow
+
+            if self._client and self._authenticated:
+                self._posts_client = PostsClient(self._client)
+                self._media_client = MediaClient(self._client)
+
+        except Exception as e:
+            print(f"Warning: Failed to initialize Twitter client: {e}")
+            self._authenticated = False
+
+    @property
+    def platform(self) -> Platform:
+        return Platform.TWITTER
+
+    # =========================================================================
+    # Authentication
+    # =========================================================================
+
+    def authenticate(self, credentials: Dict[str, str]) -> bool:
+        """Authenticate with Twitter using provided credentials"""
+        self._bearer_token = credentials.get("bearer_token")
+        self._access_token = credentials.get("access_token")
+        self._access_secret = credentials.get("access_secret")
+        self._client_id = credentials.get("client_id", self._client_id)
+        self._client_secret = credentials.get("client_secret", self._client_secret)
+
+        self._initialize_client()
+        return self._authenticated
+
+    def get_auth_url(self, redirect_uri: str) -> str:
+        """Get Twitter OAuth 2.0 authorization URL using XDK"""
+        if not self._client:
+            self._client = Client(
+                client_id=self._client_id,
+                client_secret=self._client_secret,
+                redirect_uri=redirect_uri,
+                scope=["tweet.read", "tweet.write", "users.read", "offline.access"],
+            )
+
+        try:
+            url, state = self._client.get_authorization_url()
+            return url
+        except Exception as e:
+            # Fallback to manual URL construction
+            scopes = "tweet.read tweet.write users.read offline.access"
+            return (
+                f"https://twitter.com/i/oauth2/authorize"
+                f"?response_type=code"
+                f"&client_id={self._client_id}"
+                f"&redirect_uri={redirect_uri}"
+                f"&scope={scopes}"
+                f"&state=state"
+                f"&code_challenge=challenge"
+                f"&code_challenge_method=plain"
+            )
+
+    def exchange_code(self, code: str, redirect_uri: str) -> Dict[str, str]:
+        """Exchange authorization code for access token using XDK"""
+        if not self._client:
+            self._client = Client(
+                client_id=self._client_id,
+                client_secret=self._client_secret,
+                redirect_uri=redirect_uri,
+            )
+
+        try:
+            tokens = self._client.exchange_code(authorization_code=code)
+
+            if tokens and "access_token" in tokens:
+                self._access_token = tokens["access_token"]
+                self._authenticated = True
+                self._posts_client = PostsClient(self._client)
+                self._media_client = MediaClient(self._client)
+
+            return tokens if tokens else {"error": "No tokens returned"}
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def refresh_access_token(self) -> bool:
+        """Refresh the access token using XDK"""
+        if not self._client:
+            return False
+
+        try:
+            if self._client.is_token_expired():
+                new_token = self._client.refresh_token()
+                if new_token:
+                    self._access_token = new_token.get("access_token")
+                    return True
+            return True  # Token not expired
+        except Exception:
+            return False
+
+    # =========================================================================
+    # Content Generation
+    # =========================================================================
+
+    def get_script_instructions(self) -> str:
+        """Twitter-specific content instructions"""
+        return """\
+## Twitter/X Content Guidelines
+
+### Post Types
+1. **Text-only**: Quick thoughts, hot takes
+2. **Image + Text**: Product shots, infographics
+3. **Video + Text**: Short demos, testimonials
+4. **Thread**: Multi-tweet storytelling
+
+### Character Limits
+- Tweet: 280 characters
+- With media: 280 (URL doesn't count if media attached)
+
+### Hook Strategies for Twitter
+1. **Hot Take**: Controversial opinion
+2. **Thread Starter**: "Thread: 5 things..."
+3. **Question**: Engage with a question
+4. **Stat/Fact**: Lead with surprising data
+5. **Personal Story**: "I just discovered..."
+
+### Twitter-Specific Elements
+- Brevity is key
+- Reply-worthy content
+- Quote-tweet friendly
+- Threads for longer content
+- Use of relevant #hashtags sparingly
+
+### Hashtag Guidelines
+- 1-2 hashtags max
+- Trending hashtags if relevant
+- Don't overuse (looks spammy)
+
+### Video Specs
+- Duration: 0:01 - 2:20 (140 seconds)
+- Aspect ratios: 16:9, 1:1
+- Max file size: 512MB
+- Recommended: 30-60 seconds
+
+### Content Angles That Work
+- "Just found this and had to share"
+- Product comparison threads
+- Quick tip or hack
+- Before/after with images
+- "Why no one is talking about this"
+
+### CTA Patterns
+- "Link in bio" (add to profile)
+- "Reply for link"
+- "Bookmark this"
+- "RT to save"
+- Direct link in tweet
+
+### Thread Format
+Tweet 1: Hook + promise
+Tweets 2-N: Value delivery
+Final Tweet: CTA + summary
+"""
+
+    def get_supported_content_types(self) -> List[ContentType]:
+        return [ContentType.TEXT, ContentType.IMAGE, ContentType.SHORT_VIDEO]
+
+    def get_optimal_settings(self, content_type: ContentType) -> Dict[str, Any]:
+        if content_type == ContentType.SHORT_VIDEO:
+            return {
+                "duration": get_platform_setting("twitter", "default_duration", 30),
+                "max_duration": 140,
+                "aspect_ratio": AspectRatio.LANDSCAPE.value,
+                "resolution": "720p",
+            }
+        elif content_type == ContentType.IMAGE:
+            return {
+                "aspect_ratio": AspectRatio.LANDSCAPE.value,
+                "max_images": 4,
+            }
+        else:  # TEXT
+            return {
+                "max_length": 280,
+            }
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
+
+    def _extract_tweet_id(self, result) -> Optional[str]:
+        """Extract tweet ID from XDK CreateResponse"""
+        if hasattr(result, 'data'):
+            data = result.data
+            if isinstance(data, dict):
+                return data.get('id')
+            elif hasattr(data, 'id'):
+                return data.id
+        elif isinstance(result, dict):
+            return result.get("data", {}).get("id") or result.get("id")
+        return None
+
+    # =========================================================================
+    # Media Upload
+    # =========================================================================
+
+    def upload_media(self, file_path: Path, content_type: ContentType) -> str:
+        """Upload media to Twitter using XDK"""
+        if not self._authenticated or not self._media_client:
+            return json.dumps({"error": "Not authenticated with Twitter"})
+
+        try:
+            if content_type == ContentType.SHORT_VIDEO:
+                return self._upload_video_xdk(file_path)
+            else:
+                return self._upload_image_xdk(file_path)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    def _upload_image_xdk(self, file_path: Path) -> str:
+        """Upload image using XDK MediaClient"""
+        try:
+            # Use XDK's upload method
+            result = self._media_client.upload(
+                file_path=str(file_path),
+                media_type="image"
+            )
+
+            if result and hasattr(result, 'media_id'):
+                return json.dumps({
+                    "status": "uploaded",
+                    "media_id": str(result.media_id),
+                })
+            elif result and isinstance(result, dict):
+                return json.dumps({
+                    "status": "uploaded",
+                    "media_id": result.get("media_id_string") or result.get("media_id"),
+                })
+            else:
+                return json.dumps({"error": "Upload failed - no media_id returned"})
+
+        except Exception as e:
+            return json.dumps({"error": f"Image upload failed: {str(e)}"})
+
+    def _upload_video_xdk(self, file_path: Path) -> str:
+        """Upload video using XDK MediaClient chunked upload"""
+        try:
+            file_size = file_path.stat().st_size
+
+            # Initialize upload
+            init_result = self._media_client.initialize_upload(
+                total_bytes=file_size,
+                media_type="video/mp4",
+                media_category="tweet_video"
+            )
+
+            media_id = None
+            if hasattr(init_result, 'media_id'):
+                media_id = init_result.media_id
+            elif isinstance(init_result, dict):
+                media_id = init_result.get("media_id_string") or init_result.get("media_id")
+
+            if not media_id:
+                return json.dumps({"error": "Failed to initialize upload"})
+
+            # Append chunks
+            chunk_size = 5 * 1024 * 1024  # 5MB chunks
+            with open(file_path, "rb") as f:
+                segment_index = 0
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+
+                    self._media_client.append_upload(
+                        media_id=media_id,
+                        segment_index=segment_index,
+                        media_data=chunk
+                    )
+                    segment_index += 1
+
+            # Finalize upload
+            final_result = self._media_client.finalize_upload(media_id=media_id)
+
+            return json.dumps({
+                "status": "uploaded",
+                "media_id": str(media_id),
+            })
+
+        except Exception as e:
+            return json.dumps({"error": f"Video upload failed: {str(e)}"})
+
+    # =========================================================================
+    # Posting
+    # =========================================================================
+
+    def post_content(self, package: ContentPackage) -> Dict[str, Any]:
+        """Post content to Twitter using XDK"""
+        if not self._authenticated or not self._posts_client:
+            return {"error": "Not authenticated with Twitter"}
+
+        try:
+            # Prepare tweet text
+            text = package.script.hook[:200]
+            hashtags = " ".join(package.script.hashtags[:2])
+            tweet_text = f"{text}\n\n{package.product.affiliate_link}\n\n{hashtags}"
+
+            if len(tweet_text) > 280:
+                tweet_text = tweet_text[:277] + "..."
+
+            # Upload media if present
+            media_ids = None
+            if package.media_path:
+                upload_result = json.loads(
+                    self.upload_media(Path(package.media_path), package.content_type)
+                )
+                if "media_id" in upload_result:
+                    media_ids = [upload_result["media_id"]]
+                elif "error" in upload_result:
+                    return {"error": f"Media upload failed: {upload_result['error']}"}
+
+            # Create tweet using XDK
+            body = {'text': tweet_text}
+            if media_ids:
+                body['media'] = {'media_ids': media_ids}
+            result = self._posts_client.create(body=body)
+
+            # Extract tweet ID from result
+            tweet_id = self._extract_tweet_id(result)
+
+            return {
+                "status": "posted",
+                "tweet_id": tweet_id,
+                "platform": "twitter",
+                "text": tweet_text[:50] + "..." if len(tweet_text) > 50 else tweet_text,
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def post_thread(self, tweets: List[str]) -> Dict[str, Any]:
+        """Post a thread of tweets using XDK"""
+        if not self._authenticated or not self._posts_client:
+            return {"error": "Not authenticated"}
+
+        tweet_ids = []
+        reply_to = None
+
+        try:
+            for tweet_text in tweets:
+                body = {'text': tweet_text}
+                if reply_to:
+                    body['reply'] = {'in_reply_to_tweet_id': reply_to}
+                result = self._posts_client.create(body=body)
+
+                # Extract tweet ID
+                tweet_id = self._extract_tweet_id(result)
+
+                if tweet_id:
+                    tweet_ids.append(tweet_id)
+                    reply_to = tweet_id
+
+            return {
+                "status": "posted",
+                "tweet_ids": tweet_ids,
+                "thread_length": len(tweet_ids),
+                "platform": "twitter",
+            }
+
+        except Exception as e:
+            return {"error": str(e), "partial_tweets": tweet_ids}
+
+    def post_text_only(self, text: str) -> Dict[str, Any]:
+        """Post a simple text tweet"""
+        if not self._authenticated or not self._posts_client:
+            return {"error": "Not authenticated"}
+
+        try:
+            if len(text) > 280:
+                text = text[:277] + "..."
+
+            result = self._posts_client.create(body={'text': text})
+
+            tweet_id = self._extract_tweet_id(result)
+
+            return {
+                "status": "posted",
+                "tweet_id": tweet_id,
+                "platform": "twitter",
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    # =========================================================================
+    # Analytics
+    # =========================================================================
+
+    def get_post_stats(self, post_id: str) -> Dict[str, Any]:
+        """Get tweet metrics using XDK"""
+        if not self._authenticated or not self._posts_client:
+            return {"error": "Not authenticated"}
+
+        try:
+            result = self._posts_client.get_by_id(
+                tweet_id=post_id,
+                tweet_fields=["public_metrics", "created_at"]
+            )
+
+            if hasattr(result, 'data'):
+                return {
+                    "tweet_id": post_id,
+                    "metrics": result.data.public_metrics if hasattr(result.data, 'public_metrics') else {},
+                    "created_at": result.data.created_at if hasattr(result.data, 'created_at') else None,
+                }
+            elif isinstance(result, dict):
+                return result
+
+            return {"tweet_id": post_id, "data": str(result)}
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def delete_post(self, post_id: str) -> Dict[str, Any]:
+        """Delete a tweet using XDK"""
+        if not self._authenticated or not self._posts_client:
+            return {"error": "Not authenticated"}
+
+        try:
+            result = self._posts_client.delete(tweet_id=post_id)
+            return {"status": "deleted", "tweet_id": post_id}
+        except Exception as e:
+            return {"error": str(e)}
+
+
+# Create default instance
+twitter_adapter = TwitterAdapter()

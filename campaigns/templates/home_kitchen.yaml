@@ -1,0 +1,81 @@
+# Home & Kitchen Campaign
+# Home organization, kitchen gadgets, and lifestyle products
+
+campaign:
+  id: home_kitchen
+  name: "Home & Kitchen Finds"
+  niche: home_organization
+  description: "Home organization, kitchen gadgets, and lifestyle content"
+
+research:
+  template: affiliate
+  price_range: [15, 60]
+  products_per_run: 5
+  categories:
+    - home-garden
+    - kitchen
+    - organization
+    - storage
+  keywords:
+    - space-saving
+    - aesthetic
+    - organize
+    - kitchen-hack
+    - satisfying
+
+platforms:
+  tiktok:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 3
+    duration: 15
+    aspect_ratio: "9:16"
+    priority: 1
+    content_focus: "Satisfying organization, kitchen hacks"
+
+  instagram:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 2
+    duration: 30
+    aspect_ratio: "9:16"
+    priority: 2
+    content_focus: "Room transformations, aesthetic reveals"
+
+  youtube:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 2
+    duration: 45
+    aspect_ratio: "9:16"
+    priority: 3
+    content_focus: "Recipe demos, organization projects"
+
+  twitter:
+    enabled: true
+    content_type: short_video
+    posts_per_day: 3
+    duration: 30
+    aspect_ratio: "16:9"
+    priority: 4
+    content_focus: "Quick kitchen hacks, food content"
+
+  linkedin:
+    enabled: true
+    content_type: text
+    posts_per_day: 1
+    priority: 5
+    content_focus: "Home office setup, WFH productivity"
+
+schedule:
+  enabled: true
+  cron: "0 10 * * *"  # Daily at 10 AM
+  timezone: "America/New_York"
+
+content_angles:
+  - "Kitchen gadgets that actually work"
+  - "Satisfying organization"
+  - "Small space solutions"
+  - "Amazon home finds"
+  - "30-second recipes"
+  - "Room transformation"
