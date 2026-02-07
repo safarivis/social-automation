@@ -3,6 +3,7 @@ Twitter/X Platform Adapter
 
 Handles Twitter/X content via the official XDK (X Developer Kit).
 Supports text, images, and video posts with OAuth 2.0 PKCE authentication.
+Supports multiple accounts with easy switching.
 """
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -24,33 +25,93 @@ from config.settings import (
     TWITTER_BEARER_TOKEN,
     get_platform_setting
 )
+from config.accounts import account_manager, get_account
 
 
 class TwitterAdapter(PlatformAdapter):
-    """Twitter/X platform adapter using official XDK"""
+    """Twitter/X platform adapter using official XDK with multi-account support"""
 
-    def __init__(self):
+    def __init__(self, account_id: str = None):
         super().__init__()
         self._client: Optional[Client] = None
         self._posts_client: Optional[PostsClient] = None
         self._media_client: Optional[MediaClient] = None
+        self._current_account_id: Optional[str] = None
 
-        # Store credentials
-        self._bearer_token = TWITTER_BEARER_TOKEN
-        self._access_token = TWITTER_ACCESS_TOKEN
-        self._access_secret = TWITTER_ACCESS_SECRET
-        self._client_id = TWITTER_API_KEY
-        self._client_secret = TWITTER_API_SECRET
+        # Load account credentials
+        self._load_account(account_id)
 
-        # Initialize client if credentials available
+    def _load_account(self, account_id: str = None):
+        """Load credentials for specified account or active account"""
+        # Get account from manager
+        account = get_account("twitter", account_id)
+
+        if account:
+            self._current_account_id = account_id or account_manager.get_active_account_id("twitter")
+            self._auth_type = account.get("auth_type", "oauth1")
+
+            if self._auth_type == "oauth2":
+                # OAuth 2.0 account (e.g., lewkai)
+                self._oauth2_token = account.get("access_token")
+                self._oauth2_refresh = account.get("refresh_token")
+                self._client_id = account.get("client_id")
+                self._client_secret = account.get("client_secret")
+                self._bearer_token = None
+                self._access_token = None
+                self._access_secret = None
+            else:
+                # OAuth 1.0a account (e.g., personal)
+                self._auth_type = "oauth1"
+                self._bearer_token = account.get("bearer_token")
+                self._access_token = account.get("access_token")
+                self._access_secret = account.get("access_secret")
+                self._client_id = account.get("api_key")
+                self._client_secret = account.get("api_secret")
+                self._oauth2_token = None
+                self._oauth2_refresh = None
+        else:
+            # Fallback to direct env vars (OAuth 1.0a)
+            self._current_account_id = "personal"
+            self._auth_type = "oauth1"
+            self._bearer_token = TWITTER_BEARER_TOKEN
+            self._access_token = TWITTER_ACCESS_TOKEN
+            self._access_secret = TWITTER_ACCESS_SECRET
+            self._client_id = TWITTER_API_KEY
+            self._client_secret = TWITTER_API_SECRET
+            self._oauth2_token = None
+            self._oauth2_refresh = None
+
+        # Initialize client with new credentials
         self._initialize_client()
 
+    def switch_account(self, account_id: str) -> bool:
+        """Switch to a different Twitter account"""
+        accounts = account_manager.list_accounts("twitter")
+        if account_id not in accounts:
+            return False
+
+        self._load_account(account_id)
+        return self._authenticated
+
+    def get_current_account(self) -> str:
+        """Get the current account ID"""
+        return self._current_account_id or "personal"
+
+    def list_accounts(self) -> List[str]:
+        """List available Twitter accounts"""
+        return account_manager.list_accounts("twitter")
+
     def _initialize_client(self):
-        """Initialize XDK client with available credentials"""
+        """Initialize client with available credentials (OAuth 1.0a or 2.0)"""
         try:
-            # Prefer OAuth1 for user context (required for posting)
-            if self._client_id and self._client_secret and self._access_token and self._access_secret:
-                # OAuth 1.0a - required for posting tweets
+            if self._auth_type == "oauth2" and self._oauth2_token:
+                # OAuth 2.0 - use direct API calls instead of XDK
+                self._client = None
+                self._posts_client = None
+                self._media_client = None
+                self._authenticated = True
+            elif self._client_id and self._client_secret and self._access_token and self._access_secret:
+                # OAuth 1.0a - use XDK for posting tweets
                 auth = OAuth1(
                     api_key=self._client_id,
                     api_secret=self._client_secret,
@@ -60,21 +121,16 @@ class TwitterAdapter(PlatformAdapter):
                 )
                 self._client = Client(auth=auth)
                 self._authenticated = True
+                self._posts_client = PostsClient(self._client)
+                self._media_client = MediaClient(self._client)
             elif self._bearer_token:
                 # App-only auth with bearer token (read-only)
                 self._client = Client(bearer_token=self._bearer_token)
                 self._authenticated = True
-            elif self._client_id and self._client_secret:
-                # OAuth 2.0 PKCE flow - client ready for auth
-                self._client = Client(
-                    client_id=self._client_id,
-                    client_secret=self._client_secret,
-                )
-                self._authenticated = False  # Need to complete OAuth flow
-
-            if self._client and self._authenticated:
                 self._posts_client = PostsClient(self._client)
                 self._media_client = MediaClient(self._client)
+            else:
+                self._authenticated = False
 
         except Exception as e:
             print(f"Warning: Failed to initialize Twitter client: {e}")
@@ -437,22 +493,60 @@ Final Tweet: CTA + summary
 
     def post_text_only(self, text: str) -> Dict[str, Any]:
         """Post a simple text tweet"""
-        if not self._authenticated or not self._posts_client:
+        if not self._authenticated:
             return {"error": "Not authenticated"}
 
         try:
             if len(text) > 280:
                 text = text[:277] + "..."
 
-            result = self._posts_client.create(body={'text': text})
+            if self._auth_type == "oauth2":
+                # Use direct API call for OAuth 2.0
+                return self._post_oauth2(text)
+            else:
+                # Use XDK for OAuth 1.0a
+                if not self._posts_client:
+                    return {"error": "Not authenticated"}
 
-            tweet_id = self._extract_tweet_id(result)
+                result = self._posts_client.create(body={'text': text})
+                tweet_id = self._extract_tweet_id(result)
 
-            return {
-                "status": "posted",
-                "tweet_id": tweet_id,
-                "platform": "twitter",
-            }
+                return {
+                    "status": "posted",
+                    "tweet_id": tweet_id,
+                    "platform": "twitter",
+                    "account": self._current_account_id,
+                }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _post_oauth2(self, text: str, media_ids: List[str] = None) -> Dict[str, Any]:
+        """Post tweet using OAuth 2.0 token (direct API call)"""
+        import httpx
+
+        url = 'https://api.twitter.com/2/tweets'
+        headers = {
+            'Authorization': f'Bearer {self._oauth2_token}',
+            'Content-Type': 'application/json'
+        }
+        data = {'text': text}
+        if media_ids:
+            data['media'] = {'media_ids': media_ids}
+
+        try:
+            response = httpx.post(url, headers=headers, json=data, timeout=30.0)
+            result = response.json()
+
+            if response.status_code == 201:
+                return {
+                    "status": "posted",
+                    "tweet_id": result.get("data", {}).get("id"),
+                    "platform": "twitter",
+                    "account": self._current_account_id,
+                }
+            else:
+                return {"error": result.get("detail") or result.get("title") or str(result)}
 
         except Exception as e:
             return {"error": str(e)}

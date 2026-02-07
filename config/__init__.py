@@ -1,6 +1,13 @@
 """
 Configuration module for Multi-Platform Social Automation.
 """
+from .accounts import (
+    account_manager,
+    get_account,
+    set_active_account,
+    list_accounts,
+    AccountManager,
+)
 from .settings import (
     # API Keys
     XAI_API_KEY,
@@ -55,6 +62,12 @@ from .settings import (
 )
 
 __all__ = [
+    # Account Management
+    "account_manager",
+    "get_account",
+    "set_active_account",
+    "list_accounts",
+    "AccountManager",
     # API Keys
     "XAI_API_KEY",
     "TIKTOK_CLIENT_KEY",

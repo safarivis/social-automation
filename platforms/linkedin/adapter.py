@@ -3,6 +3,7 @@ LinkedIn Platform Adapter
 
 Handles LinkedIn content via Marketing API.
 Supports text posts, images, video, and documents.
+Supports multiple accounts (personal + company pages) with easy switching.
 """
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -17,22 +18,73 @@ from config.settings import (
     LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_ACCESS_TOKEN,
     LINKEDIN_PERSON_URN, get_platform_setting
 )
+from config.accounts import account_manager, get_account
 
 
 class LinkedInAdapter(PlatformAdapter):
-    """LinkedIn platform adapter for professional content"""
+    """LinkedIn platform adapter with multi-account support (personal + company pages)"""
 
-    def __init__(self):
+    def __init__(self, account_id: str = None):
         super().__init__()
         self.api_base = "https://api.linkedin.com/v2"
-        self._access_token = LINKEDIN_ACCESS_TOKEN
-        self._person_urn: Optional[str] = LINKEDIN_PERSON_URN
+        self._current_account_id: Optional[str] = None
+        self._account_type: str = "personal"  # "personal" or "organization"
+
+        # Load account credentials
+        self._load_account(account_id)
+
+    def _load_account(self, account_id: str = None):
+        """Load credentials for specified account or active account"""
+        account = get_account("linkedin", account_id)
+
+        if account:
+            self._current_account_id = account_id or account_manager.get_active_account_id("linkedin")
+            self._access_token = account.get("access_token")
+            self._account_type = account.get("type", "personal")
+
+            if self._account_type == "organization":
+                self._author_urn = account.get("organization_urn")
+                self._person_urn = None
+            else:
+                self._person_urn = account.get("person_urn")
+                self._author_urn = self._person_urn
+        else:
+            # Fallback to direct env vars
+            self._current_account_id = "personal"
+            self._access_token = LINKEDIN_ACCESS_TOKEN
+            self._person_urn = LINKEDIN_PERSON_URN
+            self._author_urn = self._person_urn
+            self._account_type = "personal"
 
         if self._access_token:
             self._authenticated = True
-            # Fetch person URN if not configured
-            if not self._person_urn:
+            # Fetch person URN if not configured and personal account
+            if self._account_type == "personal" and not self._person_urn:
                 self._fetch_person_urn()
+                self._author_urn = self._person_urn
+        else:
+            self._authenticated = False
+
+    def switch_account(self, account_id: str) -> bool:
+        """Switch to a different LinkedIn account"""
+        accounts = account_manager.list_accounts("linkedin")
+        if account_id not in accounts:
+            return False
+
+        self._load_account(account_id)
+        return self._authenticated
+
+    def get_current_account(self) -> str:
+        """Get the current account ID"""
+        return self._current_account_id or "personal"
+
+    def get_account_type(self) -> str:
+        """Get account type: 'personal' or 'organization'"""
+        return self._account_type
+
+    def list_accounts(self) -> List[str]:
+        """List available LinkedIn accounts"""
+        return account_manager.list_accounts("linkedin")
 
     @property
     def platform(self) -> Platform:
@@ -218,7 +270,7 @@ class LinkedInAdapter(PlatformAdapter):
 
     def upload_media(self, file_path: Path, content_type: ContentType) -> str:
         """Upload media to LinkedIn"""
-        if not self._authenticated or not self._person_urn:
+        if not self._authenticated or not self._author_urn:
             return json.dumps({"error": "Not authenticated with LinkedIn"})
 
         if content_type == ContentType.SHORT_VIDEO:
@@ -240,7 +292,7 @@ class LinkedInAdapter(PlatformAdapter):
         register_data = {
             "registerUploadRequest": {
                 "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                "owner": self._person_urn,
+                "owner": self._author_urn,
                 "serviceRelationships": [{
                     "relationshipType": "OWNER",
                     "identifier": "urn:li:userGeneratedContent"
@@ -287,7 +339,7 @@ class LinkedInAdapter(PlatformAdapter):
         register_data = {
             "registerUploadRequest": {
                 "recipes": ["urn:li:digitalmediaRecipe:feedshare-video"],
-                "owner": self._person_urn,
+                "owner": self._author_urn,
                 "serviceRelationships": [{
                     "relationshipType": "OWNER",
                     "identifier": "urn:li:userGeneratedContent"
@@ -335,7 +387,7 @@ class LinkedInAdapter(PlatformAdapter):
         register_data = {
             "registerUploadRequest": {
                 "recipes": ["urn:li:digitalmediaRecipe:feedshare-document"],
-                "owner": self._person_urn,
+                "owner": self._author_urn,
                 "serviceRelationships": [{
                     "relationshipType": "OWNER",
                     "identifier": "urn:li:userGeneratedContent"
@@ -374,7 +426,7 @@ class LinkedInAdapter(PlatformAdapter):
 
     def post_content(self, package: ContentPackage) -> Dict[str, Any]:
         """Post content to LinkedIn"""
-        if not self._authenticated or not self._person_urn:
+        if not self._authenticated or not self._author_urn:
             return {"error": "Not authenticated with LinkedIn"}
 
         url = f"{self.api_base}/ugcPosts"
@@ -420,7 +472,7 @@ class LinkedInAdapter(PlatformAdapter):
                 }]
 
         post_data = {
-            "author": self._person_urn,
+            "author": self._author_urn,
             "lifecycleState": "PUBLISHED",
             "specificContent": {
                 "com.linkedin.ugc.ShareContent": share_content
@@ -461,7 +513,7 @@ class LinkedInAdapter(PlatformAdapter):
         }
 
         comment_data = {
-            "actor": self._person_urn,
+            "actor": self._author_urn,
             "message": {
                 "text": f"Link: {package.product.affiliate_link}"
             }
