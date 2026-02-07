@@ -525,6 +525,9 @@ Final Tweet: CTA + summary
         """Post tweet using OAuth 2.0 token (direct API call)"""
         import httpx
 
+        # Try to refresh token if needed
+        self._refresh_oauth2_token_if_needed()
+
         url = 'https://api.twitter.com/2/tweets'
         headers = {
             'Authorization': f'Bearer {self._oauth2_token}',
@@ -545,11 +548,72 @@ Final Tweet: CTA + summary
                     "platform": "twitter",
                     "account": self._current_account_id,
                 }
+            elif response.status_code == 401:
+                # Token expired, try refresh
+                if self._refresh_oauth2_token():
+                    return self._post_oauth2(text, media_ids)  # Retry
+                return {"error": "Token expired and refresh failed"}
             else:
                 return {"error": result.get("detail") or result.get("title") or str(result)}
 
         except Exception as e:
             return {"error": str(e)}
+
+    def _refresh_oauth2_token_if_needed(self):
+        """Refresh OAuth 2.0 token proactively"""
+        # Always try to refresh before posting to avoid failures
+        if self._oauth2_refresh:
+            self._refresh_oauth2_token()
+
+    def _refresh_oauth2_token(self) -> bool:
+        """Refresh the OAuth 2.0 access token"""
+        import httpx
+        import base64
+        import os
+
+        if not self._oauth2_refresh:
+            return False
+
+        client_id = self._client_id or os.getenv("TWITTER_CLIENT_ID")
+        client_secret = self._client_secret or os.getenv("TWITTER_CLIENT_SECRET")
+
+        if not client_id or not client_secret:
+            return False
+
+        try:
+            credentials = base64.b64encode(f'{client_id}:{client_secret}'.encode()).decode()
+
+            response = httpx.post(
+                'https://api.twitter.com/2/oauth2/token',
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': f'Basic {credentials}'
+                },
+                data={
+                    'grant_type': 'refresh_token',
+                    'refresh_token': self._oauth2_refresh,
+                },
+                timeout=30.0
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                self._oauth2_token = result.get('access_token')
+                self._oauth2_refresh = result.get('refresh_token')
+
+                # Update account manager with new tokens
+                from config.accounts import account_manager
+                account = account_manager.get_account("twitter", self._current_account_id)
+                if account:
+                    account['access_token'] = self._oauth2_token
+                    account['refresh_token'] = self._oauth2_refresh
+
+                return True
+            return False
+
+        except Exception as e:
+            print(f"Token refresh failed: {e}")
+            return False
 
     # =========================================================================
     # Analytics
