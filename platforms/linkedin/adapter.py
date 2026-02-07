@@ -15,7 +15,7 @@ from platforms.base import PlatformAdapter
 from core.models import Platform, ContentType, ContentPackage, AspectRatio
 from config.settings import (
     LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_ACCESS_TOKEN,
-    get_platform_setting
+    LINKEDIN_PERSON_URN, get_platform_setting
 )
 
 
@@ -26,10 +26,13 @@ class LinkedInAdapter(PlatformAdapter):
         super().__init__()
         self.api_base = "https://api.linkedin.com/v2"
         self._access_token = LINKEDIN_ACCESS_TOKEN
-        self._person_urn: Optional[str] = None
+        self._person_urn: Optional[str] = LINKEDIN_PERSON_URN
 
         if self._access_token:
             self._authenticated = True
+            # Fetch person URN if not configured
+            if not self._person_urn:
+                self._fetch_person_urn()
 
     @property
     def platform(self) -> Platform:
@@ -52,7 +55,8 @@ class LinkedInAdapter(PlatformAdapter):
 
     def get_auth_url(self, redirect_uri: str) -> str:
         """Get LinkedIn OAuth URL"""
-        scopes = "r_liteprofile w_member_social"
+        # Use OpenID Connect scopes for profile + posting permission
+        scopes = "openid+profile+w_member_social"
         return (
             f"https://www.linkedin.com/oauth/v2/authorization"
             f"?response_type=code"
@@ -87,17 +91,19 @@ class LinkedInAdapter(PlatformAdapter):
             return {"error": str(e)}
 
     def _fetch_person_urn(self):
-        """Fetch the authenticated user's person URN"""
+        """Fetch the authenticated user's person URN using OpenID Connect"""
         if not self._access_token:
             return
 
-        url = f"{self.api_base}/me"
+        # Use OpenID Connect userinfo endpoint
+        url = "https://api.linkedin.com/v2/userinfo"
         headers = {"Authorization": f"Bearer {self._access_token}"}
 
         try:
             response = httpx.get(url, headers=headers, timeout=30.0)
             data = response.json()
-            person_id = data.get("id")
+            # OpenID returns 'sub' as the person ID
+            person_id = data.get("sub")
             if person_id:
                 self._person_urn = f"urn:li:person:{person_id}"
         except httpx.HTTPError:
